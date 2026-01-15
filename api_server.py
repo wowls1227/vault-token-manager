@@ -19,8 +19,8 @@ app = Flask(__name__)
 
 # Vault 서버 주소
 VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://127.0.0.1:8200')
-# 서버가 토큰 생성/관리에 사용하는 토큰 (root 또는 충분한 권한 필요)
-RENEWAL_TOKEN = os.getenv('RENEWAL_TOKEN', 'hvs.CAESIA9jaE5bvKVQCHbnFZxAibKbJKWIBcijYBmKy_ZTHgMgGh4KHGh2cy5ocWpUbWFJQWQwVXZPWUlzWlVoc1l3MGw')
+# 서버가 토큰 생성/관리에 사용하는 토큰 (vault token 생성, 조회 권한 필요, orphan 토큰 필요)
+RENEWAL_TOKEN = os.getenv('RENEWAL_TOKEN', 'RENEWAL_TOKEN')
 
 # 로깅 설정
 import logging

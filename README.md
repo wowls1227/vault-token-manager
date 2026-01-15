@@ -624,7 +624,7 @@ curl -X POST http://localhost:5001/api/token/create \
 ```json
 {
   "success": true,
-  "token": "hvs.CAESINiyYYhFuQnOptmjpaiQfqKAVPCdMBvDrYLGSO5czPnk...",
+  "token": "hvs.CAES...",
   "message": "api 토큰이 성공적으로 생성되었습니다"
 }
 ```
@@ -727,7 +727,7 @@ TOKEN="hvs.CAESINiyYYhFuQnOptmjpaiQ..."
 
 # API 호출
 curl -s --request GET \
-  --header "Token-Header: hvs.CAESIKqdp79qK3qkAyMi84m-2ZR1VwFPSYwyWYR2aoKz10vgGh4KHGh2cy5uNks5b0RGNWhKVllib2V3MDFIS1dydXg" \
+  --header "Token-Header: hvs.CAESIKqdp..." \
   http://127.0.0.1:5001/api/data | jq
 {
   "data": {
@@ -747,7 +747,7 @@ curl -s --request GET \
 ### 4. 토큰 정보 확인 (Vault CLI)
 
 ```bash
-vault token lookup hvs.CAESIKqdp79qK3qkAyMi84m-2ZR1VwFPSYwyWYR2aoKz10vgGh4KHGh2cy5uNks5b0RGNWhKVllib2V3MDFIS1dydXg
+vault token lookup hvs.CAESIKq.....
 
 Key                 Value
 ---                 -----
@@ -758,7 +758,7 @@ display_name        token-test
 entity_id           n/a
 expire_time         2026-01-15T10:48:35.667674+09:00
 explicit_max_ttl    0s
-id                  hvs.CAESIKqdp79qK3qkAyMi84m-2ZR1VwFPSYwyWYR2aoKz10vgGh4KHGh2cy5uNks5b0RGNWhKVllib2V3MDFIS1dydXg
+id                  hvs.CAESIKqdp79......
 issue_time          2026-01-15T09:48:35.667678+09:00
 meta                map[create:true read:true]
 num_uses            0
