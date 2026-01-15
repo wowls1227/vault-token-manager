@@ -4,7 +4,7 @@ Vault Token Auth를 활용한 API 서버 + 토큰 관리 웹 UI + 자동 토큰 
 
 ---
 
-## 📋 목차
+## 목차
 
 1. [시스템 개요](#시스tem-개요)
 2. [프로젝트 구조](#프로젝트-구조)
@@ -15,7 +15,7 @@ Vault Token Auth를 활용한 API 서버 + 토큰 관리 웹 UI + 자동 토큰 
 
 ---
 
-## 🎯 시스템 개요
+## 시스템 개요
 Vault의 토큰 발급 시스템을 이용해 별도의 토큰 발급 기능 개발 공수를 줄일 수 있습니다.
 API 서버는 Vault에서 토큰을 생성해서 사용자에게 전달하고 사용자는 받은 토큰을 API 서버에 제출하면 API 서버는 전달받은 토큰을 Vault를 통해 유효성을 검사하고 자신의 서비스를 이용할 수 있도록 승인할 수 있습니다.
 
@@ -39,32 +39,32 @@ API 서버는 Vault에서 토큰을 생성해서 사용자에게 전달하고 �
 ```mermaid
 flowchart TD
     %% Client
-    Client["웹 브라우저 (클라이언트)\nhttp://localhost:5001 접속"]
+    Client["웹 브라우저 (클라이언트) - http://localhost:5001 접속"]
 
     %% Flask Server
     subgraph Flask["Flask API Server"]
         direction TB
 
         subgraph MainThread["Main Thread (Flask App)"]
-            UI["웹 UI 제공\nGET /"]
-            CreateToken["토큰 생성 API\nPOST /api/token/create"]
-            VerifyToken["토큰 검증 API\nGET /api/data"]
+            UI["웹 UI 제공 GET /"]
+            CreateToken["토큰 생성 API - POST /api/token/create"]
+            VerifyToken["토큰 검증 API - GET /api/data"]
         end
 
-        subgraph BackgroundThread["Background Thread (Daemon)"]
+        subgraph BackgroundThread["Background Thread"]
             Worker["token_renewal_worker()"]
             CheckTTL["10초마다 RENEWAL_TOKEN TTL 체크"]
             AutoRenew["2/3 지점 도달 시 자동 갱신"]
         end
 
-        Globals["전역 변수\n- current_token (RENEWAL_TOKEN)\n- token_lock (Thread Lock)"]
+        Globals["전역 변수 - current_token (RENEWAL_TOKEN)\n- token_lock (Thread Lock)"]
     end
 
     %% Vault Server
     subgraph Vault["HashiCorp Vault Server\nhttp://127.0.0.1:8200"]
-        VaultCreate["Token 생성\nPOST /v1/auth/token/create"]
-        VaultLookup["Token 검증\nGET /v1/auth/token/lookup-self"]
-        VaultRenew["Token 갱신\nPOST /v1/auth/token/renew-self"]
+        VaultCreate["Token 생성 - POST /v1/auth/token/create"]
+        VaultLookup["Token 검증 - GET /v1/auth/token/lookup-self"]
+        VaultRenew["Token 갱신 - POST /v1/auth/token/renew-self"]
     end
 
     %% Flows
@@ -81,10 +81,12 @@ flowchart TD
     MainThread --- Globals
     BackgroundThread --- Globals
 ```
+### 웹 UI
+<img width="684" height="757" alt="image" src="https://github.com/user-attachments/assets/e2c9c824-c85e-4744-a518-73ecff4b1b80" />
 
 ---
 
-## 📁 프로젝트 구조
+## 프로젝트 구조
 
 ```
 vault-token-api/
@@ -98,7 +100,7 @@ vault-token-api/
 
 ---
 
-## ⚙️ 환경 설정
+## 환경 설정
 
 ### 1. 필수 요구사항
 
@@ -140,7 +142,7 @@ RENEWAL_TOKEN=hvs.CAESXXXXXXXXXX...
 
 ---
 
-## 🔍 함수별 상세 설명
+## 함수별 상세 설명
 
 ### 전역 변수
 
@@ -278,7 +280,7 @@ renewal_threshold = 60 * 2/3 = 40초
 남은 시간 60초 → 갱신 안함
 남은 시간 50초 → 갱신 안함
 남은 시간 40초 → 갱신 안함
-남은 시간 20초 → ⚠️ 갱신 실행! (60-40=20)
+남은 시간 20초 → 갱신 실행! (60-40=20)
 ```
 
 ---
@@ -576,29 +578,29 @@ Token-Header: hvs.CAESINiyYYhFuQnOptmjpaiQ...
 
 **로그 예시**:
 ```
-2025-01-15 10:00:00 - INFO - ✅ Vault 서버 연결 확인 완료: http://127.0.0.1:8200
-2025-01-15 10:00:00 - INFO - ✅ RENEWAL_TOKEN 유효성 확인 완료
+2025-01-15 10:00:00 - INFO - Vault 서버 연결 확인 완료: http://127.0.0.1:8200
+2025-01-15 10:00:00 - INFO - RENEWAL_TOKEN 유효성 확인 완료
 2025-01-15 10:00:00 - INFO -    - Display Name: api-server-renewal-token
 2025-01-15 10:00:00 - INFO -    - TTL: 60초
 2025-01-15 10:00:00 - INFO -    - Creation TTL: 60초
-2025-01-15 10:00:00 - INFO - 🔄 토큰 갱신 워커 시작
-2025-01-15 10:00:00 - INFO - ✅ 토큰 자동 갱신 스레드 시작됨
-2025-01-15 10:00:00 - INFO - 🚀 API 서버 시작 - http://0.0.0.0:5001
-2025-01-15 10:00:00 - INFO - 📱 UI 접속 - http://localhost:5001
+2025-01-15 10:00:00 - INFO - 토큰 갱신 워커 시작
+2025-01-15 10:00:00 - INFO - 토큰 자동 갱신 스레드 시작됨
+2025-01-15 10:00:00 - INFO - API 서버 시작 - http://0.0.0.0:5001
+2025-01-15 10:00:00 - INFO - UI 접속 - http://localhost:5001
 ```
 
 ---
 
-## 📚 API 문서
+## API 문서
 
 ### 엔드포인트 목록
 
 | 메서드 | 경로 | 설명 | 인증 필요 |
 |--------|------|------|-----------|
-| GET | `/` | 토큰 생성 웹 UI | ❌ |
-| POST | `/api/token/create` | 토큰 생성 API | ❌ |
-| GET | `/health` | 서버 상태 확인 | ❌ |
-| GET | `/api/data` | 보호된 API (샘플) | ✅ |
+| GET | `/` | 토큰 생성 웹 UI | X |
+| POST | `/api/token/create` | 토큰 생성 API | X |
+| GET | `/health` | 서버 상태 확인 | X |
+| GET | `/api/data` | 보호된 API (샘플) | O |
 
 ### 상세 API 스펙
 
@@ -683,7 +685,7 @@ curl -s --request GET \
 
 ---
 
-## 🚀 사용 방법
+## 사용 방법
 
 ### 1. 빠른 시작
 

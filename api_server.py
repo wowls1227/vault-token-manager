@@ -79,7 +79,7 @@ def renew_token(token):
         )
         
         if response.status_code == 200:
-            logger.info("System - ✅ 토큰 갱신 성공")
+            logger.info("System - 토큰 갱신 성공")
             return True
         else:
             logger.warning(f"System - 토큰 갱신 실패: HTTP {response.status_code}")
@@ -97,7 +97,7 @@ def token_renewal_worker():
     """
     global current_token
     
-    logger.info("🔄 토큰 갱신 워커 시작")
+    logger.info("토큰 갱신 워커 시작")
     
     while True:
         try:
@@ -129,13 +129,13 @@ def token_renewal_worker():
             
             # 2/3 지점 도달 시 갱신
             if remaining_time <= (creation_ttl - renewal_threshold):
-                logger.warning(f"System - ⚠️  토큰 갱신 필요 (남은 시간: {remaining_time}초)")
+                logger.warning(f"System - 토큰 갱신 필요 (남은 시간: {remaining_time}초)")
                 
                 with token_lock:
                     if renew_token(current_token):
-                        logger.info("System - ✅ 토큰 갱신 완료")
+                        logger.info("System - 토큰 갱신 완료")
                     else:
-                        logger.error("System - ❌ 토큰 갱신 실패")
+                        logger.error("System - 토큰 갱신 실패")
             
             # 10초마다 체크
             time.sleep(10)
@@ -215,7 +215,7 @@ def create_vault_token(display_name, permissions, ttl='1h'):
         if response.status_code == 200:
             result = response.json()
             token = result['auth']['client_token']
-            logger.info(f"API - ✅ 토큰 생성 성공: {token[:10]}...")
+            logger.info(f"API - 토큰 생성 성공: {token[:10]}...")
             
             return {
                 'success': True,
@@ -454,7 +454,7 @@ def index():
     </head>
     <body>
         <div class="container">
-            <h1>🔐 Vault Token Manager</h1>
+            <h1>Vault Token Manager</h1>
             <p class="subtitle">새로운 Vault 토큰을 생성하세요</p>
             
             <form id="tokenForm">
@@ -543,14 +543,14 @@ def index():
                     if (data.success) {
                         resultDiv.className = 'result success';
                         resultDiv.innerHTML = `
-                            <div class="result-title">✅ ${data.message}</div>
+                            <div class="result-title"> ${data.message}</div>
                             <div class="token-display" id="tokenValue">${data.token}</div>
-                            <button class="copy-btn" onclick="copyToken()">📋 복사</button>
+                            <button class="copy-btn" onclick="copyToken()">복사</button>
                         `;
                     } else {
                         resultDiv.className = 'result error';
                         resultDiv.innerHTML = `
-                            <div class="result-title">❌ 오류 발생</div>
+                            <div class="result-title"> 오류 발생</div>
                             <p>${data.message}</p>
                         `;
                     }
@@ -560,7 +560,7 @@ def index():
                     resultDiv.style.display = 'block';
                     resultDiv.className = 'result error';
                     resultDiv.innerHTML = `
-                        <div class="result-title">❌ 오류 발생</div>
+                        <div class="result-title"> 오류 발생</div>
                         <p>서버 연결 실패: ${error.message}</p>
                     `;
                 }
@@ -699,28 +699,28 @@ if __name__ == '__main__':
     # Vault 서버 연결 확인
     try:
         response = requests.get(f'{VAULT_ADDR}/v1/sys/health', timeout=5)
-        logger.info(f"✅ Vault 서버 연결 확인 완료: {VAULT_ADDR}")
+        logger.info(f"Vault 서버 연결 확인 완료: {VAULT_ADDR}")
     except Exception as e:
-        logger.error(f"❌ Vault 서버 연결 실패: {e}")
+        logger.error(f"Vault 서버 연결 실패: {e}")
         logger.warning("서버를 시작하지만 Vault 연결이 필요합니다")
     
     # RENEWAL_TOKEN 유효성 확인
     token_info = get_token_info(RENEWAL_TOKEN)
     if token_info:
-        logger.info(f"✅ RENEWAL_TOKEN 유효성 확인 완료")
+        logger.info(f"RENEWAL_TOKEN 유효성 확인 완료")
         logger.info(f"   - Display Name: {token_info.get('display_name', 'N/A')}")
         logger.info(f"   - TTL: {token_info.get('ttl', 0)}초")
         logger.info(f"   - Creation TTL: {token_info.get('creation_ttl', 0)}초")
     else:
-        logger.error("❌ RENEWAL_TOKEN이 유효하지 않습니다!")
+        logger.error("RENEWAL_TOKEN이 유효하지 않습니다!")
         sys.exit(1)
     
     # 토큰 갱신 백그라운드 스레드 시작
     renewal_thread = threading.Thread(target=token_renewal_worker, daemon=True)
     renewal_thread.start()
-    logger.info("✅ 토큰 자동 갱신 스레드 시작됨")
+    logger.info("토큰 자동 갱신 스레드 시작됨")
     
     # Flask 서버 시작
-    logger.info("🚀 API 서버 시작 - http://0.0.0.0:5001")
-    logger.info("📱 UI 접속 - http://localhost:5001")
+    logger.info("API 서버 시작 - http://0.0.0.0:5001")
+    logger.info("UI 접속 - http://localhost:5001")
     app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)
