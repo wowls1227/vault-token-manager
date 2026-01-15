@@ -222,7 +222,8 @@ def create_vault_token(display_name, permissions, ttl='24h'):
             'display_name': display_name,
             'ttl': ttl,
             'meta': metadata,
-            'renewable': False
+            'renewable': False,
+            'policies': ["default"]
         }
         
         logger.info(f"API - 토큰 생성 요청: display_name={display_name}, metadata={metadata}")
