@@ -6,18 +6,20 @@ Vault Token Auth를 활용한 API 서버 + 토큰 관리 웹 UI + 자동 토큰 
 
 ## 목차
 
-1. [시스템 개요](#시스tem-개요)
+1. [시스템 개요](#시스템-개요)
 2. [프로젝트 구조](#프로젝트-구조)
 3. [환경 설정](#환경-설정)
 4. [함수별 상세 설명](#함수별-상세-설명)
 5. [API 문서](#api-문서)
 6. [사용 방법](#사용-방법)
+7. [테스트](#테스트)
 
 ---
 
 ## 시스템 개요
+
 Vault의 토큰 발급 시스템을 이용해 별도의 토큰 발급 기능 개발 공수를 줄일 수 있습니다.
-API 서버는 Vault에서 토큰을 생성해서 사용자에게 전달하고 사용자는 받은 토큰을 API 서버에 제출하면 API 서버는 전달받은 토큰을 Vault를 통해 유효성을 검사하고 자신의 서비스를 이용할 수 있도록 승인할 수 있습니다.
+API 서버는 Vault에서 토큰을 생성해서 사용자에게 전달하고, 사용자는 받은 토큰을 API 서버에 제출하면 API 서버는 전달받은 토큰을 Vault를 통해 유효성을 검사하고 자신의 서비스를 이용할 수 있도록 승인할 수 있습니다.
 
 ### 주요 기능
 
@@ -39,38 +41,38 @@ API 서버는 Vault에서 토큰을 생성해서 사용자에게 전달하고 �
 ```mermaid
 flowchart TD
     %% Client
-    Client["웹 브라우저 (클라이언트) - http://localhost:5001 접속"]
+    Client["웹 브라우저/API 클라이언트<br/>http://localhost:5001 접속"]
 
     %% Flask Server
     subgraph Flask["Flask API Server"]
         direction TB
 
         subgraph MainThread["Main Thread (Flask App)"]
-            UI["웹 UI 제공 GET /"]
-            CreateToken["토큰 생성 API - POST /api/token/create"]
-            VerifyToken["토큰 검증 API - GET /api/data"]
+            UI["웹 UI 제공<br/>GET /"]
+            CreateToken["토큰 생성 API<br/>POST /api/token/create"]
+            VerifyToken["토큰 검증 API<br/>GET /api/data"]
         end
 
         subgraph BackgroundThread["Background Thread"]
             Worker["token_renewal_worker()"]
-            CheckTTL["10초마다 RENEWAL_TOKEN TTL 체크"]
-            AutoRenew["2/3 지점 도달 시 자동 갱신"]
+            CheckTTL["10초마다 RENEWAL_TOKEN<br/>TTL 체크"]
+            AutoRenew["2/3 지점 도달 시<br/>자동 갱신"]
         end
 
-        Globals["전역 변수 - current_token (RENEWAL_TOKEN)\n- token_lock (Thread Lock)"]
+        Globals["전역 변수<br/>- current_token (RENEWAL_TOKEN)<br/>- token_lock (Thread Lock)"]
     end
 
     %% Vault Server
-    subgraph Vault["HashiCorp Vault Server\nhttp://127.0.0.1:8200"]
-        VaultCreate["Token 생성 - POST /v1/auth/token/create"]
-        VaultLookup["Token 검증 - GET /v1/auth/token/lookup-self"]
-        VaultRenew["Token 갱신 - POST /v1/auth/token/renew-self"]
+    subgraph Vault["HashiCorp Vault Server<br/>http://127.0.0.1:8200"]
+        VaultCreate["Token 생성<br/>POST /v1/auth/token/create-orphan"]
+        VaultLookup["Token 검증<br/>POST /v1/auth/token/lookup"]
+        VaultRenew["Token 갱신<br/>POST /v1/auth/token/renew-self"]
     end
 
     %% Flows
     Client -->|"HTTP Request"| UI
     Client -->|"HTTP Request"| CreateToken
-    Client -->|"HTTP Request"| VerifyToken
+    Client -->|"HTTP Request<br/>(with Token-Header)"| VerifyToken
 
     CreateToken -->|"Vault API Call"| VaultCreate
     VerifyToken -->|"Vault API Call"| VaultLookup
@@ -81,7 +83,9 @@ flowchart TD
     MainThread --- Globals
     BackgroundThread --- Globals
 ```
+
 ### 웹 UI
+
 <img width="684" height="757" alt="image" src="https://github.com/user-attachments/assets/e2c9c824-c85e-4744-a518-73ecff4b1b80" />
 
 ---
@@ -90,12 +94,12 @@ flowchart TD
 
 ```
 vault-token-api/
-├── server.py                    # 메인 Flask 서버 (이 문서 설명 대상)
-├── client.py                    # API 클라이언트 (테스트용)
+├── server.py                    # 메인 Flask 서버
+├── test_clients.py              # API 테스트 클라이언트 테스트용 스크립트
 ├── requirements.txt             # Python 패키지 의존성
-├── README.md                    # 함수 설명 및 사용법 정리
+├── README.md                    # 프로젝트 문서 (이 파일)
 │
-└── .env                         # 환경 변수 설정 파일
+└── .env                         # 환경 변수 설정 파일 (선택 사항)
 ```
 
 ---
@@ -114,27 +118,21 @@ vault-token-api/
 # 1. Python 패키지 설치
 pip install -r requirements.txt
 
-# 2. Vault 설치 (macOS)
-brew tap hashicorp/tap
-brew install hashicorp/tap/vault
-
-# 2-2. Vault 설치 (Ubuntu/Debian)
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install vault
+# 2. Vault 설치(Debian/ubuntu)
+VAULT_VERSION="1.21.4+ent"  # 원하는 버전으로 변경
+wget https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip
+unzip vault_${VAULT_VERSION}_linux_amd64.zip
+sudo mv vault /usr/local/bin/
+sudo chmod +x /usr/local/bin/vault
 ```
 
-### 3. 환경 변수 (.env 파일)
+### 3. 환경 변수
+
+서버 실행 시 환경 변수로 설정하거나, `.env` 파일을 생성하여 관리할 수 있습니다.
 
 ```bash
 # Vault 서버 주소
 VAULT_ADDR=http://127.0.0.1:8200
-
-# API 서버 주소
-TEST_SERVER=http://localhost:5001
-
-# Vault Root Token (개발 환경)
-VAULT_TOKEN=root
 
 # 서버가 사용하는 갱신 가능한 토큰 (자동 생성됨)
 RENEWAL_TOKEN=hvs.CAESXXXXXXXXXX...
@@ -154,31 +152,102 @@ RENEWAL_TOKEN=hvs.CAESXXXXXXXXXX...
 
 #### 2. `RENEWAL_TOKEN`
 - **타입**: `str`
-- **설명**: API 서버가 토큰 생성/관리에 사용하는 마스터 토큰
+- **설명**: API 서버가 토큰 생성/관리에 사용하는 마스터 토큰, Vault에서 orphan 토큰 형태로 발급
 - **기본값**: 환경변수에서 로드
 - **특징**: 
-  - TTL: 1분
+  
+  - TTL: 1분 (테스트용, 프로덕션에서는 더 긴 시간 권장)
   - Renewable: true
   - 백그라운드 스레드에서 자동 갱신
+  - vault 권한
+  
+    ```hcl
+    # 토큰 생성
+    path "auth/token/create-orphan" {
+      capabilities = ["create", "update"]
+    }
+    
+    # 다른 토큰 유효성 검사
+    path "auth/token/lookup" {
+      capabilities = ["create", "update"]
+    }
+    
+    # 자기 자신 토큰 정보 조회
+    path "auth/token/lookup-self" {
+      capabilities = ["read"]
+    }
+    
+    # 자기 자신 토큰 갱신
+    path "auth/token/renew-self" {
+      capabilities = ["update"]
+    }
+    
 
-#### 3. `current_token`
+#### 3. `VAULT_TOKEN_PREFIX`
+- **타입**: `str`
+- **값**: `"hvs."`
+- **설명**: Vault 토큰의 표준 접두사 제거, Vault 존재를 숨기는 용도
+- **용도**: UI 표시 시 제거, API 호출 시 복원
+
+#### 4. `current_token`
 - **타입**: `str`
 - **설명**: 현재 활성화된 RENEWAL_TOKEN (전역 변수)
 - **용도**: 토큰 생성 시 사용하는 인증 토큰
 - **동기화**: `token_lock`으로 thread-safe 보장
 
-#### 4. `token_lock`
+#### 5. `token_lock`
 - **타입**: `threading.Lock()`
 - **설명**: 멀티스레드 환경에서 `current_token` 접근 제어
-- **용도**: Race condition 방지
+- **용도**: 한번에 한 스레드만 current_token을 사용하도록 설정
+
+---
+
+### 유틸리티 함수
+
+#### 1. `strip_vault_prefix(token)`
+
+**목적**: Vault존재를 숨기고 UI 표시되는 토큰에서 `hvs.` 접두사 제거
+
+**파라미터**:
+- `token` (str): Vault 토큰
+
+**반환값**:
+- `str`: 접두사가 제거된 토큰
+
+**동작 흐름**:
+```python
+입력: "hvs.CAESIKqdp..."
+출력: "CAESIKqdp..."
+```
+
+---
+
+#### 2. `attach_vault_prefix(token)`
+
+**목적**: Vault API 호출을 위해 토큰에 `hvs.` 접두사 복원
+
+**파라미터**:
+- `token` (str): 토큰 (접두사 있거나 없거나)
+
+**반환값**:
+- `str`: 접두사가 붙은 완전한 Vault 토큰
+
+**동작 흐름**:
+```python
+입력: "CAESIKqdp..."
+출력: "hvs.CAESIKqdp..."
+
+입력: "hvs.CAESIKqdp..." (이미 있는 경우)
+출력: "hvs.CAESIKqdp..." (그대로 반환)
+```
 
 ---
 
 ### 핵심 함수
 
-#### 1. `get_token_info(token)`
+#### 3. `get_token_info(token)`
 
-**목적**: 토큰의 상세 정보를 Vault에서 조회
+**목적**: RENEWAL_TOKEN의 상세 정보를 Vault에서 조회
 
 **파라미터**:
 - `token` (str): 조회할 Vault 토큰
@@ -216,9 +285,9 @@ RENEWAL_TOKEN=hvs.CAESXXXXXXXXXX...
 
 ---
 
-#### 2. `renew_token(token)`
+#### 4. `renew_token(token)`
 
-**목적**: 토큰을 갱신하여 TTL을 초기화
+**목적**: current_token을 갱신하여 token TTL 초기화 API 서버가 Vault에 지속적으로 접근할 수 있도록 하는 역할
 
 **파라미터**:
 - `token` (str): 갱신할 Vault 토큰
@@ -235,7 +304,7 @@ RENEWAL_TOKEN=hvs.CAESXXXXXXXXXX...
 1. Vault API 호출: POST /v1/auth/token/renew-self
 2. HTTP Header: X-Vault-Token: <token>
 3. 응답 확인: status_code == 200
-4. 로그 기록: "System - ✅ 토큰 갱신 성공"
+4. 로그 기록: "System - 토큰 갱신 성공"
 ```
 
 **주의사항**:
@@ -244,7 +313,7 @@ RENEWAL_TOKEN=hvs.CAESXXXXXXXXXX...
 
 ---
 
-#### 3. `token_renewal_worker()`
+#### 5. `token_renewal_worker()`
 
 **목적**: 백그라운드 스레드에서 RENEWAL_TOKEN을 자동 갱신
 
@@ -285,7 +354,7 @@ renewal_threshold = 60 * 2/3 = 40초
 
 ---
 
-#### 4. `verify_token(token)`
+#### 6. `verify_token(token)`
 
 **목적**: 클라이언트가 보낸 토큰의 유효성 검증
 
@@ -297,12 +366,15 @@ renewal_threshold = 60 * 2/3 = 40초
 
 **사용하는 변수**:
 - `VAULT_ADDR`: Vault API 주소
+- `current_token`: RENEWAL_TOKEN (검증 권한 보유)
 
 **동작 흐름**:
 ```python
-1. Vault API 호출: GET /v1/auth/token/lookup-self
-2. Header: X-Vault-Token: <token>
-3. 응답 확인:
+1. Lock 획득 → current_token 복사
+2. Vault API 호출: POST /v1/auth/token/lookup
+3. Header: X-Vault-Token: <current_token>
+4. Body: {"token": <검증할_토큰>}
+5. 응답 확인:
    - status_code == 200 → (True, token_info)
    - 그 외 → (False, None)
 ```
@@ -318,7 +390,7 @@ if is_valid:
 
 ---
 
-#### 5. `create_vault_token(display_name, permissions, ttl='1h')`
+#### 7. `create_vault_token(display_name, permissions, ttl='24h')`
 
 **목적**: 웹 UI 또는 API 요청으로부터 새 Vault 토큰 생성
 
@@ -326,13 +398,13 @@ if is_valid:
 - `display_name` (str): 토큰 표시 이름
 - `permissions` (dict): 권한 딕셔너리
   - 예: `{'create': True, 'read': True, 'update': False}`
-- `ttl` (str): 토큰 유효 시간 (기본: 1시간)
+- `ttl` (str): 토큰 유효 시간 (기본: 24시간)
 
 **반환값**:
 ```python
 {
     'success': bool,
-    'token': str,        # 성공 시 토큰 값
+    'token': str,        # 성공 시 토큰 값 (hvs. 접두사 제거됨)
     'message': str       # 결과 메시지
 }
 ```
@@ -349,25 +421,30 @@ if is_valid:
    - permissions에서 True인 항목만 추출
    - meta = {'create': 'true', 'read': 'true'}
 3. Vault API 호출:
-   - POST /v1/auth/token/create
+   - POST /v1/auth/token/create-orphan
    - Header: X-Vault-Token: <current_token>
    - Body: {
        'display_name': 'my-app',
-       'ttl': '1h',
-       'meta': {'create': 'true'}
+       'ttl': '24h',
+       'meta': {'create': 'true'},
+       'renewable': False
      }
 4. 응답 파싱:
    - client_token 추출
+   - strip_vault_prefix()로 접두사 제거
    - 성공 메시지 반환
 ```
 
-**중요**: `meta` 필드 사용 (~~`metadata`~~ 아님!)
+**중요 사항**:
+- `meta` 필드 사용 (~~`metadata`~~ 아님!)
+- `create-orphan` 엔드포인트 사용으로 독립적인 토큰 생성
+- `renewable: False`로 설정 (클라이언트 토큰은 갱신 불필요)
 
 ---
 
 ### 웹 UI 라우트
 
-#### 6. `index()` - `GET /`
+#### 8. `index()` - `GET /`
 
 **목적**: 토큰 생성 웹 UI 페이지 제공
 
@@ -384,18 +461,18 @@ if is_valid:
    - 폼 제출 시 `/api/token/create` API 호출
    - 로딩 스피너 표시
    - 토큰 생성 결과 표시
-   - 클립보드 복사 기능
+   - 클립보드 복사 기능 (`copyToken()`)
 
 3. **스타일**
    - 반응형 디자인
-   - 그라데이션 배경
-   - 애니메이션 효과
+   - 그라데이션 배경 (보라색 계열)
+   - 애니메이션 효과 (버튼 호버, 스피너)
 
 ---
 
 ### API 엔드포인트
 
-#### 7. `api_create_token()` - `POST /api/token/create`
+#### 9. `api_create_token()` - `POST /api/token/create`
 
 **목적**: 웹 UI 또는 외부 API 요청으로부터 토큰 생성
 
@@ -417,17 +494,23 @@ if is_valid:
 ```json
 {
   "success": true,
-  "token": "hvs.CAESINiyYYhFuQnOptmjpaiQ...",
+  "token": "CAESINiyYYhFuQnOptmjpaiQ...",
   "message": "api 토큰이 성공적으로 생성되었습니다"
 }
 ```
 
-**사용하는 함수**:
+**Response (실패 시 - 400)**:
+```json
+{
+  "success": false,
+  "message": "토큰 이름은 필수입니다"
+}
+```
 
+**사용하는 함수**:
 - `create_vault_token()`: 실제 토큰 생성 로직
 
 **동작 흐름**:
-
 ```python
 1. Request Body 파싱 (JSON)
 2. name 유효성 검사
@@ -437,7 +520,7 @@ if is_valid:
 
 ---
 
-#### 8. `health_check()` - `GET /health`
+#### 10. `health_check()` - `GET /health`
 
 **목적**: 서버 상태 및 연결 확인
 
@@ -464,14 +547,16 @@ if is_valid:
 
 ---
 
-#### 9. `get_data()` - `GET /api/data`
+#### 11. `get_data()` - `GET /api/data`
 
 **목적**: 토큰 인증이 필요한 API 엔드포인트 (샘플)
 
 **Request Headers**:
 ```
-Token-Header: hvs.CAESINiyYYhFuQnOptmjpaiQ...
+Token-Header: CAESINiyYYhFuQnOptmjpaiQ...
 ```
+
+> **참고**: 클라이언트는 `hvs.` 접두사 없이 토큰을 전송하며, 서버가 자동으로 `attach_vault_prefix()`를 호출하여 복원합니다.
 
 **Response (성공 시)**:
 ```json
@@ -491,15 +576,17 @@ Token-Header: hvs.CAESINiyYYhFuQnOptmjpaiQ...
 ```
 
 **사용하는 함수**:
+- `attach_vault_prefix()`: 토큰 접두사 복원
 - `verify_token()`: 토큰 유효성 검증
 
 **동작 흐름**:
 ```python
 1. Header에서 Token-Header 추출
-2. 토큰 존재 여부 확인 → 없으면 401 반환
-3. verify_token() 호출
-4. 유효하지 않으면 403 반환
-5. 유효하면 토큰 정보 포함하여 200 반환
+2. attach_vault_prefix()로 hvs. 접두사 복원
+3. 토큰 존재 여부 확인 → 없으면 401 반환
+4. verify_token() 호출
+5. 유효하지 않으면 403 반환
+6. 유효하면 토큰 정보 포함하여 200 반환
 ```
 
 **HTTP 상태 코드**:
@@ -511,7 +598,7 @@ Token-Header: hvs.CAESINiyYYhFuQnOptmjpaiQ...
 
 ### 에러 핸들러
 
-#### 10. `not_found(error)` - 404 핸들러
+#### 12. `not_found(error)` - 404 핸들러
 
 **트리거**: 존재하지 않는 URL 접근 시
 
@@ -525,7 +612,7 @@ Token-Header: hvs.CAESINiyYYhFuQnOptmjpaiQ...
 
 ---
 
-#### 11. `internal_error(error)` - 500 핸들러
+#### 13. `internal_error(error)` - 500 핸들러
 
 **트리거**: 서버 내부 오류 발생 시
 
@@ -545,7 +632,7 @@ Token-Header: hvs.CAESINiyYYhFuQnOptmjpaiQ...
 
 ### 메인 실행 블록
 
-#### 12. `if __name__ == '__main__':`
+#### 14. `if __name__ == '__main__':`
 
 **목적**: 서버 초기화 및 시작
 
@@ -626,7 +713,7 @@ curl -X POST http://localhost:5001/api/token/create \
 ```json
 {
   "success": true,
-  "token": "hvs.CAES...",
+  "token": "CAESINiyYYhFuQnOptmjpaiQ...",
   "message": "api 토큰이 성공적으로 생성되었습니다"
 }
 ```
@@ -639,6 +726,14 @@ curl -X POST http://localhost:5001/api/token/create \
 }
 ```
 
+**Response (500)** - 서버 오류:
+```json
+{
+  "success": false,
+  "message": "API - 토큰 생성 실패: HTTP 500"
+}
+```
+
 ---
 
 #### 2. GET /api/data
@@ -646,24 +741,24 @@ curl -X POST http://localhost:5001/api/token/create \
 **Request**:
 ```bash
 curl -s --request GET \
-  --header "Token-Header: hvs.CAESI...." \
+  --header "Token-Header: CAESINiyYYhFuQnOptmjpaiQ..." \
   http://127.0.0.1:5001/api/data
 ```
 
 **Response (200)**:
 ```json
 {
+  "message": "Success!",
   "data": {
+    "result": "Your API result here",
+    "timestamp": 1768438520,
+    "user": "token-test",
+    "ttl": 1134,
     "permissions": {
       "create": "true",
       "read": "true"
-    },
-    "result": "Your API result here",
-    "timestamp": 1768438520,
-    "ttl": 1134,
-    "user": "token-test"
-  },
-  "message": "Success!"
+    }
+  }
 }
 ```
 
@@ -685,90 +780,78 @@ curl -s --request GET \
 
 ---
 
+#### 3. GET /health
+
+**Request**:
+```bash
+curl http://localhost:5001/health
+```
+
+**Response (200)**:
+```json
+{
+  "status": "healthy",
+  "vault_addr": "http://127.0.0.1:8200",
+  "renewal_token_status": "hvs.CAESIA..."
+}
+```
+
+---
+
 ## 사용 방법
 
 ### 1. 빠른 시작
 
 ```bash
 # 1. Vault 서버 시작 (터미널 1)
+export VAULT_LICENSE=<vault license 입력>
 vault server -dev -dev-root-token-id="root"
 
 # 2. RENEWAL_TOKEN 생성 (터미널 2)
 export VAULT_ADDR='http://127.0.0.1:8200'
 export VAULT_TOKEN='root'
 
-TOKEN=$(curl -s --request POST \
-  --header "X-Vault-Token: root" \
-  --data '{"ttl":"1m","display_name":"api-server","renewable":true}' \
-  http://127.0.0.1:8200/v1/auth/token/create | \
-  grep -o '"client_token":"[^"]*"' | cut -d'"' -f4)
-
-echo "RENEWAL_TOKEN=$TOKEN"
-
-# 3. 서버 시작
-export RENEWAL_TOKEN=$TOKEN
-python3 server.py
-
-# 4. 브라우저에서 접속
-# http://localhost:5001
-```
-
-### 2. 웹 UI로 토큰 생성
-
-1. 브라우저에서 `http://localhost:5001` 접속
-2. **토큰 이름** 입력: `my-test-app`
-3. **권한 선택**: Create ✓, Read ✓, Update ✓
-4. **토큰 생성** 버튼 클릭
-5. 생성된 토큰 복사
-
-### 3. 생성한 토큰으로 API 호출
-
-```bash
-# 토큰 변수 설정
-TOKEN="hvs.CAESINiyYYhFuQnOptmjpaiQ..."
-
-# API 호출
-curl -s --request GET \
-  --header "Token-Header: hvs.CAESIKqdp..." \
-  http://127.0.0.1:5001/api/data | jq
-{
-  "data": {
-    "permissions": {
-      "create": "true",
-      "read": "true"
-    },
-    "result": "Your API result here",
-    "timestamp": 1768438115,
-    "ttl": 3562,
-    "user": "token-test"
-  },
-  "message": "Success!"
+vault policy write renewal-token-policy - <<EOF
+# 토큰 생성
+path "auth/token/create-orphan" {
+  capabilities = ["create", "update"]
 }
-```
 
-### 4. 토큰 정보 확인 (Vault CLI)
+# 다른 토큰 유효성 검사
+path "auth/token/lookup" {
+  capabilities = ["create", "update"]
+}
 
-```bash
-vault token lookup hvs.CAEXXXXXXXXXXXX......
+# 자기 자신 토큰 정보 조회
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
 
-Key                 Value
----                 -----
-accessor            qPCGxAur33pz3GRtOvrFBTsZ
-creation_time       1768438115
-creation_ttl        1h
-display_name        token-test
-entity_id           n/a
-expire_time         2026-01-15T10:48:35.667674+09:00
-explicit_max_ttl    0s
-id                  hvs.CAEXXXXXXXXXXXX......
-issue_time          2026-01-15T09:48:35.667678+09:00
-meta                map[create:true read:true]
-num_uses            0
-orphan              false
-path                auth/token/create
-policies            [admin default]
-renewable           true
-ttl                 59m52s
-type                service
-```
+# 자기 자신 토큰 갱신
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
 
+EOF
+
+# RENEWAL TOKEN(orphan) 생성
+vault token create -display-name=renewal-token -policy=renewal-token-policy -orphan -ttl=2m -no-default-policy
+Key                  Value
+---                  -----
+token                hvs.CAESIOKu....
+token_accessor       TAejAK4uD7zMxogHmPAsfG2L
+token_duration       2m
+token_renewable      true
+token_policies       ["renewal-token-policy"]
+identity_policies    []
+policies             ["renewal-token-policy"]
+
+# RENEWAL TOKEN 환경변수 등록
+RENEWAL_TOKEN="hvs.CAESIOKu....."
+
+# API 서버 실행
+ python api_server.py
+
+
+# 클라이언트 테스트 - API 서버에 토큰 100개 생성 요청 후 lookup 조회 -> Vault 클라이언트 변동 없이 valid인지만 조회
+python test_clients.py

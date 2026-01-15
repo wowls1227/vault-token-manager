@@ -52,7 +52,7 @@ def attach_vault_prefix(token: str) -> str:
 
 def get_token_info(token):
     """
-    토큰의 상세 정보를 조회
+    RENEWAL_TOKEN의 상세 정보를 조회
     
     Args:
         token (str): 조회할 Vault 토큰
