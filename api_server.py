@@ -22,6 +22,9 @@ VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://127.0.0.1:8200')
 # 서버가 토큰 생성/관리에 사용하는 토큰 (vault token 생성, 조회 권한 필요, orphan 토큰 필요)
 RENEWAL_TOKEN = os.getenv('RENEWAL_TOKEN', 'RENEWAL_TOKEN')
 
+VAULT_TOKEN_PREFIX = "hvs."
+
+
 # 로깅 설정
 import logging
 logging.basicConfig(
@@ -33,6 +36,18 @@ logger = logging.getLogger(__name__)
 # 전역 변수: 현재 사용 중인 토큰과 TTL
 current_token = RENEWAL_TOKEN
 token_lock = threading.Lock()
+
+def strip_vault_prefix(token: str) -> str:
+    """hvs. 접두사 제거 (UI 표시용)"""
+    if token.startswith(VAULT_TOKEN_PREFIX):
+        return token[len(VAULT_TOKEN_PREFIX):]
+    return token
+
+def attach_vault_prefix(token: str) -> str:
+    """hvs. 접두사 복원 (Vault 호출용)"""
+    if not token.startswith(VAULT_TOKEN_PREFIX):
+        return VAULT_TOKEN_PREFIX + token
+    return token
 
 
 def get_token_info(token):
@@ -155,28 +170,34 @@ def verify_token(token):
     Returns:
         tuple: (is_valid: bool, token_info: dict or None)
     """
+    """
+    RENEWAL_TOKEN을 사용해 다른 Vault 토큰을 lookup
+    """
     try:
-        logger.info(f"System - 토큰 검증 시작: {token[:10]}...")
-        
-        response = requests.get(
-            f'{VAULT_ADDR}/v1/auth/token/lookup-self',
-            headers={'X-Vault-Token': token},
+        with token_lock:
+            auth_token = current_token
+
+        response = requests.post(
+            f'{VAULT_ADDR}/v1/auth/token/lookup',
+            headers={'X-Vault-Token': auth_token},
+            json={'token': token},
             timeout=5
         )
-        
+
         if response.status_code == 200:
-            logger.info("System - 토큰 검증 성공")
             return True, response.json()
         else:
-            logger.warning(f"System - 토큰 검증 실패: HTTP {response.status_code}")
+            logger.warning(
+                f"System - 토큰 lookup 실패: HTTP {response.status_code}"
+            )
             return False, None
-            
+
     except Exception as e:
-        logger.error(f"System - 토큰 검증 중 오류 발생: {e}")
+        logger.error(f"System - 토큰 lookup 오류: {e}")
         return False, None
 
 
-def create_vault_token(display_name, permissions, ttl='1h'):
+def create_vault_token(display_name, permissions, ttl='24h'):
     """
     API 서버가 요청 받은 토큰을 Vault에서 생성
     체크한 권한 값은 metadata로 vault token에 같이 저장
@@ -200,13 +221,14 @@ def create_vault_token(display_name, permissions, ttl='1h'):
         payload = {
             'display_name': display_name,
             'ttl': ttl,
-            'meta': metadata
+            'meta': metadata,
+            'renewable': False
         }
         
         logger.info(f"API - 토큰 생성 요청: display_name={display_name}, metadata={metadata}")
         
         response = requests.post(
-            f'{VAULT_ADDR}/v1/auth/token/create',
+            f'{VAULT_ADDR}/v1/auth/token/create-orphan',
             headers={'X-Vault-Token': auth_token},
             json=payload,
             timeout=5
@@ -214,7 +236,7 @@ def create_vault_token(display_name, permissions, ttl='1h'):
         
         if response.status_code == 200:
             result = response.json()
-            token = result['auth']['client_token']
+            token = strip_vault_prefix(result['auth']['client_token'])
             logger.info(f"API - 토큰 생성 성공: {token[:10]}...")
             
             return {
@@ -644,7 +666,7 @@ def get_data():
     샘플 API 입력받은 Token 값을 Vault에 유효성 검사 및 정보 조회 후 반환
     보호된 API 엔드포인트 - Vault 토큰 인증 필요
     """
-    token = request.headers.get('Token-Header')
+    token = attach_vault_prefix(request.headers.get('Token-Header'))
     
     if not token:
         logger.warning("API - 토큰이 제공되지 않음")
