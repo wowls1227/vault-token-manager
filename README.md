@@ -644,7 +644,7 @@ curl -X POST http://localhost:5001/api/token/create \
 **Request**:
 ```bash
 curl -s --request GET \
-  --header "Token-Header: hvs.CAESIJn9HKSoYoobO3-ZqOZRwegBeLpJ2f8x-7eNbbn0WsE9Gh4KHGh2cy5EVGU2Z1dscjRxc0J1eDF4aU9SbFU3c0U" \
+  --header "Token-Header: hvs.CAESI...." \
   http://127.0.0.1:5001/api/data
 ```
 
@@ -747,7 +747,7 @@ curl -s --request GET \
 ### 4. 토큰 정보 확인 (Vault CLI)
 
 ```bash
-vault token lookup hvs.CAESIKq.....
+vault token lookup hvs.CAEXXXXXXXXXXXX......
 
 Key                 Value
 ---                 -----
@@ -758,7 +758,7 @@ display_name        token-test
 entity_id           n/a
 expire_time         2026-01-15T10:48:35.667674+09:00
 explicit_max_ttl    0s
-id                  hvs.CAESIKqdp79......
+id                  hvs.CAEXXXXXXXXXXXX......
 issue_time          2026-01-15T09:48:35.667678+09:00
 meta                map[create:true read:true]
 num_uses            0
